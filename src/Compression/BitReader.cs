@@ -40,7 +40,7 @@ internal sealed class BitReader
         long result = 0;
         for (int i = 0; i < count; i++)
         {
-            result = (result << 1) | ReadBit();  // Shift existing bits left, add new bit at LSB
+            result = (result << 1) | (long)ReadBit();  // Shift existing bits left, add new bit at LSB
         }
         return result;
     }

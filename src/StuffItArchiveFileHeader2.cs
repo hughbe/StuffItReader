@@ -10,14 +10,24 @@ namespace StuffItReader;
 public struct StuffItArchiveFileHeader2
 {
     /// <summary>
-    /// The size of the StuffIt archive file header 2 in bytes.
+    /// The size of the StuffIt archive file header 2 in bytes for version 1.
     /// </summary>
-    public const int MinSize = 42;
+    public const int MinSizeV1 = 36;
 
     /// <summary>
-    /// The maximum size of the StuffIt archive file header 2 in bytes.
+    /// The maximum size of the StuffIt archive file header 2 in bytes for version 1.
     /// </summary>
-    public const int MaxSize = 50;
+    public const int MaxSizeV1 = 50;
+
+    /// <summary>
+    /// The size of the StuffIt archive file header 2 in bytes for version 3.
+    /// </summary>
+    public const int MinSizeV3 = 32;
+
+    /// <summary>
+    /// The maximum size of the StuffIt archive file header 2 in bytes for version 3.
+    /// </summary>
+    public const int MaxSizeV3 = 46;
 
     /// <summary>
     /// Represents the flags of a StuffIt archive file header.
@@ -112,11 +122,12 @@ public struct StuffItArchiveFileHeader2
     /// <summary>
     /// Initializes a new instance of the <see cref="StuffItArchiveFileHeader2"/> class.
     /// </summary>
+    /// <param name="entryHeader">The entry header associated with this file.</param>
     /// <param name="data">The raw data for the header.</param>
     /// <exception cref="ArgumentException">Thrown when the data is invalid or too short.</exception>
-    public StuffItArchiveFileHeader2(ReadOnlySpan<byte> data)
+    public StuffItArchiveFileHeader2(StuffItArchiveEntryHeaderV5 entryHeader, ReadOnlySpan<byte> data)
     {
-        if (data.Length < MinSize)
+        if (data.Length < (entryHeader.Version == 1 ? MinSizeV1 : MinSizeV3))
         {
             throw new ArgumentException("Data is too short to contain a valid StuffIt archive file header.", nameof(data));
         }
@@ -164,8 +175,11 @@ public struct StuffItArchiveFileHeader2
         offset += 4;
 
         // Unknown, not included in version 3, included in version 1.
-        Reserved7 = BinaryPrimitives.ReadUInt32BigEndian(data.Slice(offset, 4)); ;
-        offset += 4;
+        if (entryHeader.Version == 1)
+        {
+            Reserved7 = BinaryPrimitives.ReadUInt32BigEndian(data.Slice(offset, 4)); ;
+            offset += 4;
+        }
 
         // The rest of the fields are only present if the resource fork flag is set.
         if (Flags.HasFlag(StuffItArchiveFileHeader2Flags.HasResourceFork))
@@ -199,8 +213,8 @@ public struct StuffItArchiveFileHeader2
         }
 
         Debug.Assert(Flags.HasFlag(StuffItArchiveFileHeader2Flags.HasResourceFork)
-            ? offset == MaxSize
-            : offset == MinSize);
+            ? offset == (entryHeader.Version == 1 ? MaxSizeV1 : MaxSizeV3)
+            : offset == (entryHeader.Version == 1 ? MinSizeV1 : MinSizeV3));
         
         ActualSize = offset;
     }

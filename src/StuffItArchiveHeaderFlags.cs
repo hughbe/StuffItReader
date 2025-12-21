@@ -12,6 +12,11 @@ public enum StuffItArchiveHeaderFlags : byte
     None = 0x00,
 
     /// <summary>
+    /// Archive has extended info (alternative comment format).
+    /// </summary>
+    HasExtendedInfo = 0x10,
+
+    /// <summary>
     /// Archive has comments.
     /// </summary>
     HasComments = 0x20,

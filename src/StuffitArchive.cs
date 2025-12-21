@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics.Contracts;
+using System.Drawing;
 using StuffItReader.Compression;
 using StuffItReader.Utilities;
 
@@ -140,7 +141,7 @@ public class StuffItArchive
         }
         else if (directory is StuffItArchiveDirectoryV5 v5Directory)
         {
-            return ReadEntriesAtOffsetV5(v5Directory.EntryHeaderV5.DirectoryEntryOffset, v5Directory.Header.FileCount);
+            return ReadEntriesAtOffsetV5(v5Directory.Header.FirstEntryOffset, v5Directory.Header.FileCount);
         }
         else
         {
@@ -224,7 +225,7 @@ public class StuffItArchive
 
             if (entryHeader.Flags.HasFlag(StuffItArchiveEntryHeaderFlags.IsDirectory))
             {
-                var directoryHeader = new StuffItArchiveDirectoryHeader(entryHeader, entryHeaderBuffer[StuffItArchiveEntryHeaderV5.Size..]);
+                var directoryHeader = new StuffItArchiveDirectoryHeader(HeaderV5!.Value, entryHeader, entryHeaderBuffer[StuffItArchiveEntryHeaderV5.Size..]);
                 entries.Add(new StuffItArchiveDirectoryV5(entryHeader, directoryHeader));
             }
             else
@@ -233,8 +234,12 @@ public class StuffItArchive
 
                 // Read File Header 2 if present (max 50 bytes).
                 long fileHeader2Start = _stream.Position;
-                _stream.ReadExactly(buffer[..StuffItArchiveFileHeader2.MaxSize]);
-                var fileEntry2 = new StuffItArchiveFileHeader2(buffer[..StuffItArchiveFileHeader2.MaxSize]);
+
+                var entryHeader2Size = entryHeader.Version == 1
+                    ? StuffItArchiveFileHeader2.MaxSizeV1
+                    : StuffItArchiveFileHeader2.MaxSizeV3;
+                _stream.ReadExactly(buffer[..entryHeader2Size]);
+                var fileEntry2 = new StuffItArchiveFileHeader2(entryHeader, buffer[..entryHeader2Size]);
 
                 // Calculate the actual data start position
                 long dataStartOffset = fileHeader2Start + fileEntry2.ActualSize;

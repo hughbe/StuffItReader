@@ -12,6 +12,11 @@ public enum StuffItArchiveEntryHeaderFlags : byte
     None = 0x00,
 
     /// <summary>
+    /// Unknown
+    /// </summary>
+    Unknown0x08 = 0x08,
+
+    /// <summary>
     /// Entry is encrypted.
     /// </summary>
     Encrypted = 0x20,

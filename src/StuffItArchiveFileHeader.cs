@@ -57,7 +57,12 @@ public struct StuffItArchiveFileHeader
     /// <summary>
     /// The length of the comment.
     /// </summary>
-    public byte CommentLength { get; }
+    public ushort CommentLength { get; }
+
+    /// <summary>
+    /// Reserved field for comment (unknown purpose).
+    /// </summary>
+    public ushort CommentReserved { get; }
 
     /// <summary>
     /// The comment associated with the file.
@@ -114,20 +119,20 @@ public struct StuffItArchiveFileHeader
         Name = SpanUtilities.ReadString(data, offset, entryHeader.NameLength);
         offset += entryHeader.NameLength;
 
-        if (header.Flags.HasFlag(StuffItArchiveHeaderFlags.HasComments))
+        // Additional comment info.
+        if (offset < data.Length)
         {
-            // Comment size (called K after)
-            CommentLength = data[offset];
-            offset += 1;
+            // Comment size
+            CommentLength = BinaryPrimitives.ReadUInt16BigEndian(data.Slice(offset, 2));
+            offset += 2;
+
+            // Reserved
+            CommentReserved = BinaryPrimitives.ReadUInt16BigEndian(data.Slice(offset, 2));
+            offset += 2;
 
             // Comment
             Comment = SpanUtilities.ReadString(data, offset, CommentLength);
             offset += CommentLength;
-        }
-        else
-        {
-            CommentLength = 0;
-            Comment = string.Empty;
         }
 
         Debug.Assert(offset == data.Length);

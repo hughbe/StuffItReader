@@ -8,6 +8,10 @@ public class StuffItArchiveTests
     [InlineData("ms-excel-early-1-4.sit")]
     [InlineData("Microsoft Excel 2.2 for Macintosh.img.sit")]
     [InlineData("Microsoft-Excel_13-4.0.sit")]
+    [InlineData("Excel_5.0_English.sit")]
+    [InlineData("Disk_Copy_(v4.2).sit")]
+    [InlineData("DiskCopy_6.0.sit")]
+    [InlineData("DiskCopy_6.4.sit")]
     public void Ctor_Stream(string fileName)
     {
         var stream = File.OpenRead(Path.Combine("Samples", fileName));
