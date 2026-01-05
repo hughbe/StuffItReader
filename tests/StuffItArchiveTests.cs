@@ -14,6 +14,8 @@ public class StuffItArchiveTests
     [InlineData("DiskCopy_6.4.sit")]
     [InlineData("OrgPlus1.0.sit")]
     [InlineData("ResEdit-2.1-1.sit")]
+    [InlineData("System-3-1-1.sit")]
+    [InlineData("System_1.x.sit")]
     public void Ctor_Stream(string fileName)
     {
         var stream = File.OpenRead(Path.Combine("Samples", fileName));
