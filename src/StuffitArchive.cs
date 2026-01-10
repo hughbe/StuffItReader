@@ -340,10 +340,22 @@ public class StuffItArchive
         return compressionMethod switch
         {
             StuffItArchiveCompressionMethod.None => ReadCompressedData(file, offset, length, expectedCrc, output),
+            StuffItArchiveCompressionMethod.LZW => DecompressLZW(offset, length, output),
             StuffItArchiveCompressionMethod.LZSS => DecompressLZSS(offset, length, output),
             StuffItArchiveCompressionMethod.Arsenic => DecompressArsenic(offset, output),
             _ => throw new NotSupportedException($"Unsupported compression method: {compressionMethod}."),
         };
+    }
+
+    private long DecompressLZW(long offset, long decompressedLength, Stream output)
+    {
+        _stream.Seek(offset, SeekOrigin.Begin);
+        
+        long startPosition = output.Position;
+        var decompressor = new LzwDecompressor(_stream);
+        decompressor.Decompress(output, decompressedLength);
+        
+        return output.Position - startPosition;
     }
 
     private long DecompressLZSS(long offset, long decompressedLength, Stream output)

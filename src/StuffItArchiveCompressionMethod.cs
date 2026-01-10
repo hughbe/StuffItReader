@@ -11,6 +11,11 @@ public enum StuffItArchiveCompressionMethod
     None = 0,
 
     /// <summary>
+    /// LZW compression.
+    /// </summary>
+    LZW = 2,
+
+    /// <summary>
     /// LZ + Huffman coding.
     /// </summary>
     LZSS = 13,

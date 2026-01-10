@@ -16,6 +16,9 @@ public class StuffItArchiveTests
     [InlineData("ResEdit-2.1-1.sit")]
     [InlineData("System-3-1-1.sit")]
     [InlineData("System_1.x.sit")]
+    [InlineData("DART-153.sit")]
+    [InlineData("macbinary2.sit")]
+    [InlineData("XLerator-Utilities-v2.sit")]
     public void Ctor_Stream(string fileName)
     {
         var stream = File.OpenRead(Path.Combine("Samples", fileName));
