@@ -88,7 +88,7 @@ public class StuffItArchiveTests
             ["nest manager folder/nest manager.r"] = "5e20b3423886d28112bdbaa1e26260630c0666da644b69a000e4f4c6c5e1148c",
         };
 
-        using var stream = File.OpenRead(Path.Combine("Samples", "macintoshgarden.org", "app", "mactech-vol-1-12", "NestedVolumes.sit"));
+        using var stream = File.OpenRead(Path.Combine("Samples", "macintoshgarden.org", "apps", "mactech-vol-1-12", "NestedVolumes.sit"));
         var archive = new StuffItArchive(stream);
 
         // Verify structure and content
