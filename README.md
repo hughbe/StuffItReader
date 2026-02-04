@@ -261,6 +261,61 @@ Run tests:
 dotnet test
 ```
 
+## Dumper Tool
+
+The project includes a command-line dumper tool that displays detailed information about StuffIt archives using [Spectre.Console](https://spectreconsole.net/) for formatted output.
+
+### Running the Dumper
+
+```sh
+dotnet run --project dumper/StuffItDumper.csproj -- <archive.sit>
+```
+
+### Sample Output
+
+```
+       StuffIt Archive Header (Version 1)       
+╭──────────────────┬───────────────────────────╮
+│ Property         │ Value                     │
+├──────────────────┼───────────────────────────┤
+│ Signature1       │ 0x53495421                │
+│ Signature2       │ 0x724C6175                │
+│ Version          │ 2                         │
+│ Root Entry Count │ 1                         │
+│ Total Size       │ 139.83 KB (143,189 bytes) │
+│ Header CRC       │ 0x0854                    │
+╰──────────────────┴───────────────────────────╯
+
+Archive Contents
+└── 📁 MyFolder
+    ├── 📄 ReadMe.txt
+    │   └── ╭──────────────────────┬───────────────────────╮
+    │       │ Property             │ Value                 │
+    │       ├──────────────────────┼───────────────────────┤
+    │       │ Data Start Offset    │ 0x000000F6 (246)      │
+    │       │ Data Fork            │                       │
+    │       │   Compression Method │ LZSS (13)             │
+    │       │   Uncompressed Size  │ 3.51 KB (3,593 bytes) │
+    │       │   Compressed Size    │ 1.50 KB (1,533 bytes) │
+    │       │   Compression Ratio  │ 42.7%                 │
+    │       │ Resource Fork        │ (none)                │
+    │       ╰──────────────────────┴───────────────────────╯
+```
+
+### Dumper Features
+
+- **Archive Headers**: Displays all header fields for V1 and V5 archives
+- **Hierarchical Tree View**: Shows directory structure with folder (📁) and file (📄) icons
+- **Entry Headers**: Full V1/V5 entry header details (magic numbers, flags, dates, offsets)
+- **Directory Details**: V5 directory headers with entry counts and comments
+- **File Headers**: V5 file headers with compression methods, password data, and comments
+- **Fork Information**: Data and resource fork details including:
+  - Compression method
+  - Compressed/uncompressed sizes
+  - CRC checksums
+  - Compression ratios
+- **Formatted Output**: Human-readable sizes, hex values, and flag breakdowns
+
 ## Requirements
 
 - .NET 9.0 or later
