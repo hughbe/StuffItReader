@@ -4,7 +4,7 @@ namespace StuffItReader.Compression;
 
 /// <summary>
 /// Move-To-Front decoder state.
-/// Optimized to reduce array element shifting.
+/// Optimized with unrolled loop for small positions and Span for larger.
 /// </summary>
 internal sealed class MTFDecoder
 {
@@ -16,6 +16,7 @@ internal sealed class MTFDecoder
         Reset();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset()
     {
         for (int i = 0; i < 256; i++)
@@ -29,22 +30,25 @@ internal sealed class MTFDecoder
     {
         byte value = _table[position];
         
-        // Move to front - use Buffer.BlockCopy for larger moves
-        if (position > 8)
+        if (position == 0)
         {
-            // For larger positions, memmove is more efficient
-            Buffer.BlockCopy(_table, 0, _table, 1, position);
+            return value;
+        }
+        
+        // For small positions, manual unrolled shift is faster
+        if (position <= 3)
+        {
+            if (position >= 3) _table[3] = _table[2];
+            if (position >= 2) _table[2] = _table[1];
+            _table[1] = _table[0];
         }
         else
         {
-            // For small positions, manual shift is faster
-            for (int i = position; i > 0; i--)
-            {
-                _table[i] = _table[i - 1];
-            }
+            // Use Span.CopyTo for overlapping copy (handles memmove correctly)
+            _table.AsSpan(0, position).CopyTo(_table.AsSpan(1));
         }
+        
         _table[0] = value;
-
         return value;
     }
 }

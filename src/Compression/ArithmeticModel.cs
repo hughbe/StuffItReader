@@ -2,18 +2,17 @@ using System.Runtime.CompilerServices;
 
 namespace StuffItReader.Compression;
 
-internal struct ArithmeticSymbol
-{
-    public int Symbol;
-    public int Frequency;
-}
-
+/// <summary>
+/// Adaptive arithmetic model for symbol encoding/decoding.
+/// Optimized with fast paths for common cases.
+/// </summary>
 internal sealed class ArithmeticModel
 {
     private readonly int _increment;
     private readonly int _frequencyLimit;
     private readonly int _numSymbols;
-    private readonly ArithmeticSymbol[] _symbols;
+    private readonly int _firstSymbol;
+    private readonly int[] _frequencies;
     private int _totalFrequency;
 
     public int TotalFrequency
@@ -27,67 +26,88 @@ internal sealed class ArithmeticModel
         _increment = increment;
         _frequencyLimit = frequencyLimit;
         _numSymbols = lastSymbol - firstSymbol + 1;
-        _symbols = new ArithmeticSymbol[_numSymbols];
-        
-        for (int i = 0; i < _numSymbols; i++)
-        {
-            _symbols[i].Symbol = i + firstSymbol;
-        }
+        _firstSymbol = firstSymbol;
+        _frequencies = new int[_numSymbols];
 
         Reset();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset()
     {
         _totalFrequency = _increment * _numSymbols;
-        for (int i = 0; i < _numSymbols; i++)
+        var frequencies = _frequencies;
+        int increment = _increment;
+        for (int i = 0; i < frequencies.Length; i++)
         {
-            _symbols[i].Frequency = _increment;
+            frequencies[i] = increment;
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int DecodeSymbol(int frequency, out int symLow, out int symSize)
     {
-        int cumulative = 0;
-        int n = 0;
+        var frequencies = _frequencies;
+        
+        // Fast path: check first symbol (very common in adaptive models)
+        int firstFreq = frequencies[0];
+        if (frequency < firstFreq)
+        {
+            symLow = 0;
+            symSize = firstFreq;
+            IncreaseFrequency(0);
+            return _firstSymbol;
+        }
+        
+        // Linear search for remaining symbols
+        int cumulative = firstFreq;
+        int n = 1;
         int numSymbolsMinusOne = _numSymbols - 1;
         
-        // Unroll the loop slightly for common small symbol counts
         while (n < numSymbolsMinusOne)
         {
-            int nextCumulative = cumulative + _symbols[n].Frequency;
+            int freq = frequencies[n];
+            int nextCumulative = cumulative + freq;
             if (nextCumulative > frequency)
             {
-                break;
+                symLow = cumulative;
+                symSize = freq;
+                IncreaseFrequency(n);
+                return n + _firstSymbol;
             }
             cumulative = nextCumulative;
             n++;
         }
 
+        // Last symbol
         symLow = cumulative;
-        symSize = _symbols[n].Frequency;
-
+        symSize = frequencies[n];
         IncreaseFrequency(n);
-
-        return _symbols[n].Symbol;
+        return n + _firstSymbol;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void IncreaseFrequency(int symIndex)
     {
-        _symbols[symIndex].Frequency += _increment;
+        _frequencies[symIndex] += _increment;
         _totalFrequency += _increment;
 
         if (_totalFrequency > _frequencyLimit)
         {
-            _totalFrequency = 0;
-            for (int i = 0; i < _numSymbols; i++)
-            {
-                _symbols[i].Frequency++;
-                _symbols[i].Frequency >>= 1;
-                _totalFrequency += _symbols[i].Frequency;
-            }
+            RescaleFrequencies();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void RescaleFrequencies()
+    {
+        _totalFrequency = 0;
+        var frequencies = _frequencies;
+        for (int i = 0; i < frequencies.Length; i++)
+        {
+            frequencies[i]++;
+            frequencies[i] >>= 1;
+            _totalFrequency += frequencies[i];
         }
     }
 }

@@ -70,107 +70,128 @@ public class ArchiveReadingBenchmarks
 [MemoryDiagnoser]
 public class DecompressionBenchmarks
 {
-    private StuffItArchive _archive = null!;
+    // Separate archives for each compression method
+    private StuffItArchive _lzwArchive = null!;
+    private StuffItArchive _lzssArchive = null!;
+    private StuffItArchive _arsenicArchive = null!;
+    
     private StuffItArchiveFile? _lzwFile;
     private StuffItArchiveFile? _lzssFile;
     private StuffItArchiveFile? _arsenicFile;
-    private MemoryStream _archiveStream = null!;
+    
+    private MemoryStream _lzwArchiveStream = null!;
+    private MemoryStream _lzssArchiveStream = null!;
+    private MemoryStream _arsenicArchiveStream = null!;
     private MemoryStream _outputStream = null!;
     
-    private const string SampleFile = "Samples/DiskCopy_6.0.sit";
+    // Use different sample files for each compression method
+    private const string LzwSampleFile = "Samples/macbinary2.sit";      // Has LZW files
+    private const string LzssSampleFile = "Samples/DiskCopy_6.0.sit";   // Has LZSS files
+    private const string ArsenicSampleFile = "Samples/Excel_5.0_English.sit"; // Has Arsenic files
 
     [GlobalSetup]
     public void Setup()
     {
-        if (!File.Exists(SampleFile))
-        {
-            throw new FileNotFoundException($"Sample file not found: {SampleFile}");
-        }
-        
-        _archiveStream = new MemoryStream(File.ReadAllBytes(SampleFile));
-        _archive = new StuffItArchive(_archiveStream);
         _outputStream = new MemoryStream();
         
-        // Find files with different compression methods
-        FindTestFiles(_archive.GetRootEntries());
+        // Setup LZW archive
+        if (File.Exists(LzwSampleFile))
+        {
+            _lzwArchiveStream = new MemoryStream(File.ReadAllBytes(LzwSampleFile));
+            _lzwArchive = new StuffItArchive(_lzwArchiveStream);
+            _lzwFile = FindFile(_lzwArchive, _lzwArchive.GetRootEntries(), StuffItArchiveCompressionMethod.LZW);
+        }
+        
+        // Setup LZSS archive
+        if (File.Exists(LzssSampleFile))
+        {
+            _lzssArchiveStream = new MemoryStream(File.ReadAllBytes(LzssSampleFile));
+            _lzssArchive = new StuffItArchive(_lzssArchiveStream);
+            _lzssFile = FindFile(_lzssArchive, _lzssArchive.GetRootEntries(), StuffItArchiveCompressionMethod.LZSS);
+        }
+        
+        // Setup Arsenic archive
+        if (File.Exists(ArsenicSampleFile))
+        {
+            _arsenicArchiveStream = new MemoryStream(File.ReadAllBytes(ArsenicSampleFile));
+            _arsenicArchive = new StuffItArchive(_arsenicArchiveStream);
+            _arsenicFile = FindFile(_arsenicArchive, _arsenicArchive.GetRootEntries(), StuffItArchiveCompressionMethod.Arsenic);
+        }
     }
 
-    private void FindTestFiles(List<StuffItArchiveEntry> entries)
+    private static StuffItArchiveFile? FindFile(StuffItArchive archive, List<StuffItArchiveEntry> entries, StuffItArchiveCompressionMethod method)
     {
         foreach (var entry in entries)
         {
             if (entry is StuffItArchiveDirectory dir)
             {
-                FindTestFiles(_archive.GetEntries(dir));
+                var found = FindFile(archive, archive.GetEntries(dir), method);
+                if (found != null)
+                    return found;
             }
             else if (entry is StuffItArchiveFile file)
             {
-                if (_lzwFile == null && file.DataForkCompressionMethod == StuffItArchiveCompressionMethod.LZW && file.DataForkUncompressedLength > 0)
+                if (file.DataForkCompressionMethod == method && file.DataForkUncompressedLength > 0)
                 {
-                    _lzwFile = file;
-                }
-                if (_lzssFile == null && file.DataForkCompressionMethod == StuffItArchiveCompressionMethod.LZSS && file.DataForkUncompressedLength > 0)
-                {
-                    _lzssFile = file;
-                }
-                if (_arsenicFile == null && file.DataForkCompressionMethod == StuffItArchiveCompressionMethod.Arsenic && file.DataForkUncompressedLength > 0)
-                {
-                    _arsenicFile = file;
+                    return file;
                 }
             }
         }
+        return null;
     }
 
     [GlobalCleanup]
     public void Cleanup()
     {
-        _archiveStream.Dispose();
+        _lzwArchiveStream?.Dispose();
+        _lzssArchiveStream?.Dispose();
+        _arsenicArchiveStream?.Dispose();
         _outputStream.Dispose();
     }
 
     [Benchmark(Description = "Decompress LZW data fork")]
     public long DecompressLzw()
     {
-        if (_lzwFile == null)
+        if (_lzwFile == null || _lzwArchive == null)
             return 0;
             
         _outputStream.Position = 0;
         _outputStream.SetLength(0);
-        return _archive.ReadDecompressedDataFork(_lzwFile, _outputStream);
+        return _lzwArchive.ReadDecompressedDataFork(_lzwFile, _outputStream);
     }
 
     [Benchmark(Description = "Decompress LZSS data fork")]
     public long DecompressLzss()
     {
-        if (_lzssFile == null)
+        if (_lzssFile == null || _lzssArchive == null)
             return 0;
             
         _outputStream.Position = 0;
         _outputStream.SetLength(0);
-        return _archive.ReadDecompressedDataFork(_lzssFile, _outputStream);
+        return _lzssArchive.ReadDecompressedDataFork(_lzssFile, _outputStream);
     }
 
     [Benchmark(Description = "Decompress Arsenic data fork")]
     public long DecompressArsenic()
     {
-        if (_arsenicFile == null)
+        if (_arsenicFile == null || _arsenicArchive == null)
             return 0;
             
         _outputStream.Position = 0;
         _outputStream.SetLength(0);
-        return _archive.ReadDecompressedDataFork(_arsenicFile, _outputStream);
+        return _arsenicArchive.ReadDecompressedDataFork(_arsenicFile, _outputStream);
     }
 
     [Benchmark(Description = "Read compressed data fork")]
     public long ReadCompressedDataFork()
     {
-        var file = _lzwFile ?? _lzssFile ?? _arsenicFile;
-        if (file == null)
+        // Use the LZSS file for this benchmark since it's commonly available
+        if (_lzssFile == null || _lzssArchive == null)
             return 0;
             
         _outputStream.Position = 0;
         _outputStream.SetLength(0);
-        return _archive.ReadCompressedDataFork(file, _outputStream);
+        return _lzssArchive.ReadCompressedDataFork(_lzssFile, _outputStream);
     }
 }
 
@@ -244,6 +265,60 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--check-methods")
+        {
+            CheckCompressionMethods();
+            return;
+        }
         var summary = BenchmarkRunner.Run(typeof(Program).Assembly, args: args);
+    }
+
+    private static void CheckCompressionMethods()
+    {
+        var samplesDir = "Samples";
+        Console.WriteLine("Checking compression methods in sample files...\n");
+
+        foreach (var file in Directory.GetFiles(samplesDir, "*.sit", SearchOption.AllDirectories).OrderBy(f => f))
+        {
+            try
+            {
+                using var stream = File.OpenRead(file);
+                var archive = new StuffItArchive(stream);
+                var methodCounts = new Dictionary<StuffItArchiveCompressionMethod, int>();
+                FindMethods(archive, archive.GetRootEntries(), methodCounts);
+                
+                var fileName = Path.GetFileName(file);
+                var methodStr = string.Join(", ", methodCounts.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}({kv.Value})"));
+                Console.WriteLine($"{fileName}: {methodStr}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"{Path.GetFileName(file)}: ERROR - {ex.Message}");
+            }
+        }
+
+        static void FindMethods(StuffItArchive archive, List<StuffItArchiveEntry> entries, Dictionary<StuffItArchiveCompressionMethod, int> methods)
+        {
+            foreach (var entry in entries)
+            {
+                if (entry is StuffItArchiveDirectory dir)
+                {
+                    FindMethods(archive, archive.GetEntries(dir), methods);
+                }
+                else if (entry is StuffItArchiveFile f)
+                {
+                    if (f.DataForkUncompressedLength > 0)
+                    {
+                        methods.TryGetValue(f.DataForkCompressionMethod, out var count);
+                        methods[f.DataForkCompressionMethod] = count + 1;
+                    }
+                    if (f.ResourceForkUncompressedLength > 0)
+                    {
+                        methods.TryGetValue(f.ResourceForkCompressionMethod, out var count);
+                        methods[f.ResourceForkCompressionMethod] = count + 1;
+                    }
+                }
+            }
+        }
     }
 }

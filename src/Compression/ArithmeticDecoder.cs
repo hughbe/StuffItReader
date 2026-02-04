@@ -4,7 +4,7 @@ namespace StuffItReader.Compression;
 
 /// <summary>
 /// 26-bit precision arithmetic decoder for Arsenic compression.
-/// Optimized with inlining hints.
+/// Optimized with combined decode and remove operation.
 /// </summary>
 internal sealed class ArithmeticDecoder
 {
@@ -16,9 +16,6 @@ internal sealed class ArithmeticDecoder
     private readonly BitReader _input;
     private int _range;
     private int _code;
-    
-    public int Range => _range;
-    public int Code => _code;
 
     public ArithmeticDecoder(BitReader input)
     {
@@ -52,10 +49,17 @@ internal sealed class ArithmeticDecoder
             _range = symSize * renormFactor;
         }
 
-        while (_range <= Half)
+        // Renormalize - unroll first iteration for common case
+        if (_range <= Half)
         {
             _range <<= 1;
             _code = ((_code << 1) | _input.ReadBit()) & CodeMask;
+            
+            while (_range <= Half)
+            {
+                _range <<= 1;
+                _code = ((_code << 1) | _input.ReadBit()) & CodeMask;
+            }
         }
     }
 }

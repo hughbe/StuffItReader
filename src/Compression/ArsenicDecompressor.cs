@@ -137,7 +137,7 @@ internal sealed class ArsenicDecompressor
                 ReadBlock();
                 
                 // Output bytes with buffering
-                while (_byteCount < _numBytes && output.CanWrite)
+                while (_byteCount < _numBytes)
                 {
                     byte b = ProduceByte();
                     outputBuffer[outputBufferPos++] = b;
@@ -160,6 +160,11 @@ internal sealed class ArsenicDecompressor
         {
             ArrayPool<byte>.Shared.Return(outputBuffer);
             ArrayPool<byte>.Shared.Return(_block);
+            if (_transform != null)
+            {
+                ArrayPool<int>.Shared.Return(_transform);
+                _transform = null!;
+            }
         }
 
         // Verify CRC
@@ -257,6 +262,12 @@ internal sealed class ArsenicDecompressor
             _endOfBlocks = true;
         }
 
+        // Return old transform to pool if present
+        if (_transform != null)
+        {
+            ArrayPool<int>.Shared.Return(_transform);
+        }
+        
         // Calculate inverse BWT
         _transform = CalculateInverseBWT(_block, _numBytes);
         
