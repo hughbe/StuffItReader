@@ -1,13 +1,17 @@
+using System.Runtime.CompilerServices;
+
 namespace StuffItReader.Compression;
 
 /// <summary>
 /// 26-bit precision arithmetic decoder for Arsenic compression.
+/// Optimized with inlining hints.
 /// </summary>
 internal sealed class ArithmeticDecoder
 {
     private const int NumBits = 26;
     private const int One = 1 << (NumBits - 1);
     private const int Half = 1 << (NumBits - 2);
+    private const int CodeMask = (1 << NumBits) - 1;
 
     private readonly BitReader _input;
     private int _range;
@@ -23,6 +27,7 @@ internal sealed class ArithmeticDecoder
         _code = (int)input.ReadBits(NumBits);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int DecodeFrequency(int symTot)
     {
         int freq = _code / (_range / symTot);
@@ -31,6 +36,7 @@ internal sealed class ArithmeticDecoder
         return freq;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveSymbol(int symLow, int symSize, int symTot)
     {
         int renormFactor = _range / symTot;
@@ -49,8 +55,7 @@ internal sealed class ArithmeticDecoder
         while (_range <= Half)
         {
             _range <<= 1;
-            _code = (_code << 1) | _input.ReadBit();
-            _code &= ((1 << NumBits) - 1);  // Mask to NumBits
+            _code = ((_code << 1) | _input.ReadBit()) & CodeMask;
         }
     }
 }

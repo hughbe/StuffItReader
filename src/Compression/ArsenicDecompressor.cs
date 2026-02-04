@@ -1,11 +1,17 @@
+using System.Buffers;
+using System.Runtime.CompilerServices;
+
 namespace StuffItReader.Compression;
 
 /// <summary>
 /// Arsenic (Method 15) decompressor for StuffIt archives.
 /// Ported from XADStuffItArsenicHandle.m
+/// Optimized with buffered output and reduced allocations.
 /// </summary>
 internal sealed class ArsenicDecompressor
 {
+    private const int OutputBufferSize = 8192;
+    
     private static readonly ushort[] RandomizationTable = 
     {
         0xee, 0x56, 0xf8, 0xc3, 0x9d, 0x9f, 0xae, 0x2c,
@@ -43,21 +49,21 @@ internal sealed class ArsenicDecompressor
     };
 
     private readonly Stream _stream;
-    private ArithmeticModel _initialModel;
-    private ArithmeticModel _selectorModel;
-    private ArithmeticModel[] _mtfModel;
-    private ArithmeticDecoder _decoder;
+    private ArithmeticModel _initialModel = null!;
+    private ArithmeticModel _selectorModel = null!;
+    private ArithmeticModel[] _mtfModel = null!;
+    private ArithmeticDecoder _decoder = null!;
     private MTFDecoder _mtf;
 
     private int _blockBits;
     private int _blockSize;
-    private byte[] _block;
+    private byte[] _block = null!;
     private bool _endOfBlocks;
 
     private int _numBytes;
     private int _byteCount;
     private int _transformIndex;
-    private uint[] _transform;
+    private int[] _transform = null!;
 
     private bool _randomized;
     private int _randCount;
@@ -111,24 +117,49 @@ internal sealed class ArsenicDecompressor
         _byteCount = 0;
         _repeat = 0;
 
-        _block = new byte[_blockSize];
+        // Use ArrayPool for block buffer
+        _block = ArrayPool<byte>.Shared.Rent(_blockSize);
 
         _crc = 0xFFFFFFFF;
         _compCrc = 0;
 
         _endOfBlocks = NextArithmeticSymbol(_initialModel) != 0;
 
-        // Process blocks
-        while (!_endOfBlocks)
+        // Use buffered output
+        byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(OutputBufferSize);
+        int outputBufferPos = 0;
+
+        try
         {
-            ReadBlock();
-            
-            // Output bytes
-            while (_byteCount < _numBytes && output.CanWrite)
+            // Process blocks
+            while (!_endOfBlocks)
             {
-                byte b = ProduceByte();
-                output.WriteByte(b);
+                ReadBlock();
+                
+                // Output bytes with buffering
+                while (_byteCount < _numBytes && output.CanWrite)
+                {
+                    byte b = ProduceByte();
+                    outputBuffer[outputBufferPos++] = b;
+                    
+                    if (outputBufferPos >= OutputBufferSize)
+                    {
+                        output.Write(outputBuffer, 0, outputBufferPos);
+                        outputBufferPos = 0;
+                    }
+                }
             }
+            
+            // Flush remaining output
+            if (outputBufferPos > 0)
+            {
+                output.Write(outputBuffer, 0, outputBufferPos);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(outputBuffer);
+            ArrayPool<byte>.Shared.Return(_block);
         }
 
         // Verify CRC
@@ -237,6 +268,7 @@ internal sealed class ArsenicDecompressor
         _randCount = RandomizationTable[0];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ProduceByte()
     {
         byte outByte;
@@ -254,7 +286,7 @@ internal sealed class ArsenicDecompressor
                 throw new EndOfStreamException();
             }
 
-            _transformIndex = (int)_transform[_transformIndex];
+            _transformIndex = _transform[_transformIndex];
             byte b = _block[_transformIndex];
 
             if (_randomized && _randCount == _byteCount)
@@ -297,6 +329,7 @@ internal sealed class ArsenicDecompressor
         return outByte;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int NextArithmeticSymbol(ArithmeticModel model)
     {
         int symTot = model.TotalFrequency;  // Save total before model update
@@ -319,15 +352,16 @@ internal sealed class ArsenicDecompressor
         return res;
     }
 
-    private static uint[] CalculateInverseBWT(byte[] block, int numBytes)
+    private static int[] CalculateInverseBWT(byte[] block, int numBytes)
     {
-        var counts = new int[256];
+        // Use stackalloc for small fixed-size arrays to avoid heap allocation
+        Span<int> counts = stackalloc int[256];
         for (int i = 0; i < numBytes; i++)
         {
             counts[block[i]]++;
         }
 
-        var cumCounts = new int[256];
+        Span<int> cumCounts = stackalloc int[256];
         int total = 0;
         for (int i = 0; i < 256; i++)
         {
@@ -335,14 +369,15 @@ internal sealed class ArsenicDecompressor
             total += counts[i];
         }
 
-        var transform = new uint[numBytes];
-        var tempCounts = new int[256];
-        Array.Copy(cumCounts, tempCounts, 256);
+        // Use ArrayPool for the transform array (can be large)
+        var transform = ArrayPool<int>.Shared.Rent(numBytes);
+        Span<int> tempCounts = stackalloc int[256];
+        cumCounts.CopyTo(tempCounts);
 
         for (int i = 0; i < numBytes; i++)
         {
             byte b = block[i];
-            transform[tempCounts[b]] = (uint)i;
+            transform[tempCounts[b]] = i;
             tempCounts[b]++;
         }
 

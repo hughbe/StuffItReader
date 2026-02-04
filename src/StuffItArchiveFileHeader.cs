@@ -57,17 +57,17 @@ public struct StuffItArchiveFileHeader
     /// <summary>
     /// The length of the comment.
     /// </summary>
-    public ushort CommentLength { get; }
+    public ushort? CommentLength { get; }
 
     /// <summary>
     /// Reserved field for comment (unknown purpose).
     /// </summary>
-    public ushort CommentReserved { get; }
+    public ushort? CommentReserved { get; }
 
     /// <summary>
     /// The comment associated with the file.
     /// </summary>
-    public string Comment { get; }
+    public string? Comment { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StuffItArchiveFileHeader"/> class.
@@ -131,8 +131,14 @@ public struct StuffItArchiveFileHeader
             offset += 2;
 
             // Comment
-            Comment = SpanUtilities.ReadString(data, offset, CommentLength);
-            offset += CommentLength;
+            Comment = SpanUtilities.ReadString(data, offset, CommentLength.Value);
+            offset += CommentLength.Value;
+        }
+        else
+        {
+            CommentLength = null;
+            CommentReserved = null;
+            Comment = null;
         }
 
         Debug.Assert(offset == data.Length);

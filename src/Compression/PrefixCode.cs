@@ -1,23 +1,64 @@
+using System.Runtime.CompilerServices;
+
 namespace StuffItReader.Compression;
 
 /// <summary>
 /// Prefix (Huffman) code implementation for LZSS decompression.
+/// Optimized with sorted tables for binary search and early termination.
 /// </summary>
 internal sealed class PrefixCode
 {
-    private readonly int[] _codes;
-    private readonly int[] _lengths;
-    private readonly int[] _values;
+    // Sorted by length then by code for fast searching
+    private readonly int[] _sortedCodes;
+    private readonly int[] _sortedLengths;
+    private readonly int[] _sortedValues;
     private readonly int _numCodes;
     private readonly int _maxLength;
+    
+    // Index of first code of each length for O(1) length lookup
+    private readonly int[] _lengthStartIndex;
 
     private PrefixCode(int[] codes, int[] lengths, int[] values, int numCodes, int maxLength)
     {
-        _codes = codes;
-        _lengths = lengths;
-        _values = values;
         _numCodes = numCodes;
         _maxLength = maxLength;
+        
+        // Create sorted indices by (length, code)
+        var indices = new int[numCodes];
+        for (int i = 0; i < numCodes; i++) indices[i] = i;
+        
+        Array.Sort(indices, (a, b) =>
+        {
+            int cmp = lengths[a].CompareTo(lengths[b]);
+            return cmp != 0 ? cmp : codes[a].CompareTo(codes[b]);
+        });
+        
+        // Build sorted arrays
+        _sortedCodes = new int[numCodes];
+        _sortedLengths = new int[numCodes];
+        _sortedValues = new int[numCodes];
+        
+        for (int i = 0; i < numCodes; i++)
+        {
+            _sortedCodes[i] = codes[indices[i]];
+            _sortedLengths[i] = lengths[indices[i]];
+            _sortedValues[i] = values[indices[i]];
+        }
+        
+        // Build length start index
+        _lengthStartIndex = new int[maxLength + 2];
+        int currentLength = 0;
+        for (int i = 0; i < numCodes; i++)
+        {
+            while (currentLength < _sortedLengths[i])
+            {
+                _lengthStartIndex[++currentLength] = i;
+            }
+        }
+        while (currentLength <= maxLength)
+        {
+            _lengthStartIndex[++currentLength] = numCodes;
+        }
     }
 
     public static PrefixCode FromLengths(int[] lengths, int numSymbols, int maxLength)
@@ -82,6 +123,7 @@ internal sealed class PrefixCode
         return new PrefixCode(reversedCodes, lengths, values, codes.Length, maxLen);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int ReverseBits(int value, int bitCount)
     {
         int result = 0;
@@ -93,6 +135,7 @@ internal sealed class PrefixCode
         return result;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int DecodeSymbol(HuffmanBitReader reader)
     {
         int code = 0;
@@ -100,12 +143,27 @@ internal sealed class PrefixCode
         {
             code = (code << 1) | reader.ReadBit();
             
-            // Search for matching code at this length
-            for (int i = 0; i < _numCodes; i++)
+            // Binary search for matching code at this length
+            int start = _lengthStartIndex[len];
+            int end = _lengthStartIndex[len + 1];
+            
+            // Binary search within codes of this length
+            while (start < end)
             {
-                if (_lengths[i] == len && _codes[i] == code)
+                int mid = (start + end) >> 1;
+                int midCode = _sortedCodes[mid];
+                
+                if (midCode == code)
                 {
-                    return _values[i];
+                    return _sortedValues[mid];
+                }
+                else if (midCode < code)
+                {
+                    start = mid + 1;
+                }
+                else
+                {
+                    end = mid;
                 }
             }
         }

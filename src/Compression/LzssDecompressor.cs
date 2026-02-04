@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace StuffItReader.Compression;
 
 /// <summary>
@@ -7,6 +9,8 @@ namespace StuffItReader.Compression;
 internal sealed class LzssDecompressor
 {
     private const int WindowSize = 65536;
+    private const int WindowMask = WindowSize - 1; // For fast modulo (power of 2)
+    private const int OutputBufferSize = 8192;
     
     private readonly Stream _input;
     private readonly byte[] _window;
@@ -30,42 +34,71 @@ internal sealed class LzssDecompressor
         _bitReader = new HuffmanBitReader(_input);
         ResetLZSS();
 
-        long outputCount = 0;
-        while (outputCount < decompressedLength)
-        {
-            int val = NextLiteralOrMatch(out int offset, out int length);
+        // Use buffered output to reduce WriteByte calls
+        byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(OutputBufferSize);
+        int outputBufferPos = 0;
 
-            if (val < 0x100)
+        try
+        {
+            long outputCount = 0;
+            while (outputCount < decompressedLength)
             {
-                // Literal byte
-                byte b = (byte)val;
-                output.WriteByte(b);
-                _window[_windowPosition] = b;
-                _windowPosition = (_windowPosition + 1) % WindowSize;
-                outputCount++;
-            }
-            else if (val == -1)
-            {
-                // End of stream
-                break;
-            }
-            else
-            {
-                // Match - copy from window
-                int copyPos = (_windowPosition - offset + WindowSize) % WindowSize;
-                for (int i = 0; i < length; i++)
+                int val = NextLiteralOrMatch(out int offset, out int length);
+
+                if (val < 0x100)
                 {
-                    byte b = _window[copyPos];
-                    output.WriteByte(b);
+                    // Literal byte
+                    byte b = (byte)val;
+                    outputBuffer[outputBufferPos++] = b;
                     _window[_windowPosition] = b;
-                    _windowPosition = (_windowPosition + 1) % WindowSize;
-                    copyPos = (copyPos + 1) % WindowSize;
+                    _windowPosition = (_windowPosition + 1) & WindowMask;
                     outputCount++;
                     
-                    if (outputCount >= decompressedLength)
-                        break;
+                    if (outputBufferPos >= OutputBufferSize)
+                    {
+                        output.Write(outputBuffer, 0, outputBufferPos);
+                        outputBufferPos = 0;
+                    }
+                }
+                else if (val == -1)
+                {
+                    // End of stream
+                    break;
+                }
+                else
+                {
+                    // Match - copy from window
+                    int copyPos = (_windowPosition - offset + WindowSize) & WindowMask;
+                    for (int i = 0; i < length; i++)
+                    {
+                        byte b = _window[copyPos];
+                        outputBuffer[outputBufferPos++] = b;
+                        _window[_windowPosition] = b;
+                        _windowPosition = (_windowPosition + 1) & WindowMask;
+                        copyPos = (copyPos + 1) & WindowMask;
+                        outputCount++;
+                        
+                        if (outputBufferPos >= OutputBufferSize)
+                        {
+                            output.Write(outputBuffer, 0, outputBufferPos);
+                            outputBufferPos = 0;
+                        }
+                        
+                        if (outputCount >= decompressedLength)
+                            break;
+                    }
                 }
             }
+
+            // Flush remaining output
+            if (outputBufferPos > 0)
+            {
+                output.Write(outputBuffer, 0, outputBufferPos);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(outputBuffer);
         }
     }
 

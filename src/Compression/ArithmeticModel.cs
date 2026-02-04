@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace StuffItReader.Compression;
 
 internal struct ArithmeticSymbol
@@ -14,7 +16,11 @@ internal sealed class ArithmeticModel
     private readonly ArithmeticSymbol[] _symbols;
     private int _totalFrequency;
 
-    public int TotalFrequency => _totalFrequency;
+    public int TotalFrequency
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _totalFrequency;
+    }
 
     public ArithmeticModel(int firstSymbol, int lastSymbol, int increment, int frequencyLimit)
     {
@@ -40,18 +46,23 @@ internal sealed class ArithmeticModel
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int DecodeSymbol(int frequency, out int symLow, out int symSize)
     {
         int cumulative = 0;
-        int n;
+        int n = 0;
+        int numSymbolsMinusOne = _numSymbols - 1;
         
-        for (n = 0; n < _numSymbols - 1; n++)
+        // Unroll the loop slightly for common small symbol counts
+        while (n < numSymbolsMinusOne)
         {
-            if (cumulative + _symbols[n].Frequency > frequency)
+            int nextCumulative = cumulative + _symbols[n].Frequency;
+            if (nextCumulative > frequency)
             {
                 break;
             }
-            cumulative += _symbols[n].Frequency;
+            cumulative = nextCumulative;
+            n++;
         }
 
         symLow = cumulative;
@@ -62,6 +73,7 @@ internal sealed class ArithmeticModel
         return _symbols[n].Symbol;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void IncreaseFrequency(int symIndex)
     {
         _symbols[symIndex].Frequency += _increment;
